@@ -1,0 +1,123 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// PRISMA SCHEMA — O "contrato" do seu banco de dados
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 📚 CONCEITO: O que é um ORM?
+// ORM (Object-Relational Mapper) é uma camada que mapeia tabelas do banco
+// de dados para objetos JavaScript/TypeScript. Em vez de escrever SQL puro:
+//
+//   SELECT * FROM users WHERE email = 'user@email.com'
+//
+// Você escreve TypeScript com tipagem completa:
+//
+//   await prisma.user.findUnique({ where: { email: 'user@email.com' } })
+//
+// Benefícios: tipagem, produtividade, proteção contra SQL Injection.
+// Trade-off: pode gerar queries menos otimizadas que SQL manual.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Configuração do gerador de cliente Prisma
+// O "prisma generate" lê este arquivo e gera o client TypeScript
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── Configuração do banco de dados ─────────────────────────────────────────
+// 📚 CONCEITO: Por que PostgreSQL?
+// - Open source e amplamente usado em produção
+// - Suporte completo a ACID (Atomicity, Consistency, Isolation, Durability)
+// - Excelente suporte a tipos JSON, arrays, full-text search
+// - Escalável e com ótimo ecossistema de ferramentas
+datasource db {
+  provider = "postgresql"
+  // A URL vem de variável de ambiente — NUNCA hardcode credenciais no código!
+  // Formato: postgresql://USER:PASSWORD@HOST:PORT/DATABASE
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODELOS — Representam as tabelas do banco de dados
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 📚 CONCEITO: Relacionamentos em bancos relacionais
+//
+//  User ──< Project ──< Task
+//    1        N    1       N
+//
+// Um usuário pode ter MUITOS projetos (1:N)
+// Um projeto pode ter MUITAS tarefas (1:N)
+// Essa é a essência de um banco RELACIONAL — dados conectados por chaves.
+
+// ─── Tabela: users ───────────────────────────────────────────────────────────
+model User {
+  // @id = chave primária
+  // @default(cuid()) = gera um ID único (melhor que auto-increment para APIs)
+  id        String   @id @default(cuid())
+  email     String   @unique  // @unique = índice único no banco
+  name      String
+  // ⚠️ NUNCA armazene senha em texto puro! Sempre use hash (bcrypt)
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt  // atualiza automaticamente
+
+  // Relação 1:N — um usuário tem muitos projetos
+  // Isso NÃO cria coluna no banco, é apenas para o ORM fazer JOINs
+  projects  Project[]
+
+  // Define o nome da tabela no banco (padrão seria "User")
+  @@map("users")
+}
+
+// ─── Tabela: projects ────────────────────────────────────────────────────────
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  // ? = campo opcional (NULL no banco)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Chave estrangeira — liga o projeto ao usuário dono
+  // 📚 CONCEITO: Foreign Key (FK) é o mecanismo que cria o relacionamento
+  // entre tabelas. Garante integridade referencial: não dá para criar um
+  // projeto com um userId que não existe na tabela users.
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // onDelete: Cascade = se o usuário for deletado, os projetos também são
+
+  tasks     Task[]
+
+  @@map("projects")
+}
+
+// ─── Enum: TaskStatus ────────────────────────────────────────────────────────
+// 📚 CONCEITO: Enum é um tipo especial que restringe os valores possíveis.
+// No banco de dados, isso vira uma constraint CHECK ou um tipo ENUM nativo.
+// Vantagem: evita dados inválidos como status: "concluido" (typo!)
+enum TaskStatus {
+  TODO        // A fazer
+  IN_PROGRESS // Em progresso
+  DONE        // Concluído
+}
+
+// ─── Tabela: tasks ───────────────────────────────────────────────────────────
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  // Ordem para arrastar e soltar (drag-and-drop)
+  order       Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // @@index cria um índice no banco para acelerar buscas por projectId
+  // 📚 CONCEITO: Índices são estruturas de dados (B-Tree) que aceleram
+  // consultas ao custo de mais espaço em disco e mais lentidão em writes.
+  // Regra: indexe campos que aparecem frequentemente no WHERE das queries.
+  @@index([projectId])
+  @@map("tasks")
+}

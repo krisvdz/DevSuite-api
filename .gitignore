@@ -1,0 +1,29 @@
+# ─── Dependências ────────────────────────────────────────────────────────────
+node_modules/
+
+# ─── Build ────────────────────────────────────────────────────────────────────
+dist/
+
+# ─── Variáveis de ambiente ────────────────────────────────────────────────────
+# ⚠️ NUNCA commitar arquivos .env com valores reais!
+.env
+.env.local
+.env.production
+.env.development.local
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+
+# ─── Prisma ───────────────────────────────────────────────────────────────────
+# Migrations geradas automaticamente SÃO commitadas (registram histórico do schema)
+# O diretório de migrations está incluído
+
+# ─── Sistema Operacional ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── IDEs ─────────────────────────────────────────────────────────────────────
+.idea/
+*.swp
+*.swo

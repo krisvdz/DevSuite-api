@@ -1,0 +1,53 @@
+{
+  "compilerOptions": {
+    // ─── Destino de compilação ───────────────────────────────────────────────
+    // "target": define para qual versão do JS o TypeScript vai compilar.
+    // Node 20+ suporta ES2022 (top-level await, etc.)
+    "target": "ES2022",
+
+    // "module": sistema de módulos. "commonjs" é o padrão do Node.js
+    // (enquanto browsers usam ESModules — essa é uma diferença importante!)
+    "module": "commonjs",
+
+    // "lib": bibliotecas de tipo disponíveis. "ES2022" inclui Promise, Array, etc.
+    "lib": ["ES2022"],
+
+    // ─── Saída ───────────────────────────────────────────────────────────────
+    // Onde o JS compilado vai parar
+    "outDir": "./dist",
+    "rootDir": "./src",
+
+    // ─── Qualidade e segurança ───────────────────────────────────────────────
+    // "strict": ativa TODAS as checagens rigorosas do TypeScript.
+    // É a configuração mais importante — nunca desative em projetos reais!
+    "strict": true,
+
+    // "esModuleInterop": permite importar módulos CommonJS com sintaxe ES6
+    // Ex: import express from 'express' (sem isso precisaria de import * as express)
+    "esModuleInterop": true,
+
+    // Resolve caminhos de módulo como o Node faz
+    "moduleResolution": "node",
+
+    // Permite importar arquivos .json diretamente no código
+    "resolveJsonModule": true,
+
+    // Remove comentários do output (código mais limpo em produção)
+    "removeComments": true,
+
+    // Garante que imports case-sensitive funcionem igual em Windows/Mac/Linux
+    "forceConsistentCasingInFileNames": true,
+
+    // Emite arquivos mesmo com erros de tipo (útil durante desenvolvimento)
+    "noEmitOnError": false,
+
+    // Source maps: permitem debugar o TypeScript mesmo com o JS compilado
+    "sourceMap": true,
+
+    // Otimização para Prisma e outros decorators
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
