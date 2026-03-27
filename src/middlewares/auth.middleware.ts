@@ -43,6 +43,7 @@ declare global {
   namespace Express {
     interface Request {
       userId?: string
+      user?: { id: string }
     }
   }
 }
@@ -78,6 +79,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
 
     // 3. Injeta o userId na requisição para os controllers usarem
     req.userId = payload.userId
+    req.user = { id: payload.userId }
 
     // 4. Chama o próximo middleware/controller
     next()

@@ -16,6 +16,7 @@ import express from 'express'
 import cors from 'cors'
 import authRouter from './routes/auth.routes'
 import projectRouter from './routes/project.routes'
+import { focusRoutes } from './routes/focus.routes'
 import { errorMiddleware } from './middlewares/error.middleware'
 
 const app = express()
@@ -70,6 +71,7 @@ app.get('/health', (req, res) => {
 // que ainda usam a v1. Boa prática desde o início!
 app.use('/api/auth', authRouter)
 app.use('/api/projects', projectRouter)
+app.use('/api/focus-sessions', focusRoutes)
 
 // ─── 404 Handler ──────────────────────────────────────────────────────────────
 // Captura requisições para rotas que não existem

@@ -31,9 +31,18 @@ generator client {
 // - Escalável e com ótimo ecossistema de ferramentas
 datasource db {
   provider = "postgresql"
-  // A URL vem de variável de ambiente — NUNCA hardcode credenciais no código!
-  // Formato: postgresql://USER:PASSWORD@HOST:PORT/DATABASE
-  url      = env("DATABASE_URL")
+  // DATABASE_URL: pooler do Neon (PgBouncer) — para queries em runtime
+  // DIRECT_URL: conexão direta — obrigatória para o Prisma Migrate
+  //
+  // 📚 CONCEITO: Por que duas URLs com Neon?
+  // O Neon usa PgBouncer como connection pooler para escalar conexões.
+  // O PgBouncer funciona no modo "transaction pooling" — cada transação
+  // pode ir para um servidor diferente. Isso é ótimo para performance,
+  // mas o Prisma Migrate precisa de uma sessão persistente para executar
+  // comandos de DDL (CREATE TABLE, ALTER TABLE, etc.).
+  // Solução: usar a URL direta apenas para migrations, pooler para o resto.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -64,6 +73,7 @@ model User {
   // Relação 1:N — um usuário tem muitos projetos
   // Isso NÃO cria coluna no banco, é apenas para o ORM fazer JOINs
   projects  Project[]
+  focusSessions FocusSession[]
 
   // Define o nome da tabela no banco (padrão seria "User")
   @@map("users")
@@ -120,4 +130,26 @@ model Task {
   // Regra: indexe campos que aparecem frequentemente no WHERE das queries.
   @@index([projectId])
   @@map("tasks")
+}
+
+// ─── Enum: SessionType ───────────────────────────────────────────────────────
+enum SessionType {
+  WORK
+  SHORT_BREAK
+  LONG_BREAK
+}
+
+// ─── Tabela: focus_sessions ──────────────────────────────────────────────────
+model FocusSession {
+  id          String      @id @default(cuid())
+  duration    Int         // in seconds
+  type        SessionType @default(WORK)
+  label       String?     // optional label
+  completedAt DateTime    @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, completedAt])
+  @@map("focus_sessions")
 }
