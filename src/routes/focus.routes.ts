@@ -1,17 +1,29 @@
 import { Router } from 'express'
+import { z } from 'zod'
 import { authMiddleware } from '../middlewares/auth.middleware'
 import { prisma } from '../lib/prisma'
 
 export const focusRoutes = Router()
 
+// ─── Validation Schema ────────────────────────────────────────────────────────
+const createFocusSessionSchema = z.object({
+  duration: z
+    .number({ required_error: 'Duração é obrigatória', invalid_type_error: 'Duração deve ser um número' })
+    .int('Duração deve ser um número inteiro')
+    .min(1, 'Duração deve ser pelo menos 1 segundo')
+    .max(28800, 'Duração não pode exceder 8 horas (28800 segundos)'),
+  type: z.enum(['WORK', 'SHORT_BREAK', 'LONG_BREAK']).default('WORK'),
+  label: z.string().max(200, 'Label muito longo').nullable().optional(),
+})
+
 // POST /focus-sessions — save a completed session
 focusRoutes.post('/', authMiddleware, async (req, res, next) => {
   try {
-    const { duration, type, label } = req.body
+    const data = createFocusSessionSchema.parse(req.body)
     const userId = req.user!.id
 
     const session = await prisma.focusSession.create({
-      data: { duration, type: type || 'WORK', label, userId },
+      data: { duration: data.duration, type: data.type, label: data.label, userId },
     })
 
     return res.status(201).json({ data: session })
