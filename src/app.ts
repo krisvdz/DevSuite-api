@@ -9,19 +9,24 @@ import authRouter from './routes/auth.routes'
 import projectRouter from './routes/project.routes'
 import { focusRoutes } from './routes/focus.routes'
 import { errorMiddleware } from './middlewares/error.middleware'
-import { env } from './lib/env' // Valida variáveis de ambiente na inicialização
+import { env } from './lib/env'
 
 const app = express()
 
 // ─── CORS ────────────────────────────────────────────────────────────────────────
-const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+const allowedOrigins = env.CORS_ORIGIN
+  ? env.CORS_ORIGIN.split(',').map((o) => o.trim())
   : ['http://localhost:5173']
 
 app.use(
   cors({
-    origin: env.CORS_ORIGIN?.split(',') || 'http://localhost:5173',
-    credentials: true, // permite enviar cookies (útil para auth mais avançada)
+    origin: (origin, callback) => {
+      // Permite requisições sem origin (curl, Postman, server-to-server)
+      if (!origin) return callback(null, true)
+      if (allowedOrigins.includes(origin)) return callback(null, true)
+      callback(new Error(`CORS: origin '${origin}' não permitida`))
+    },
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
@@ -30,22 +35,23 @@ app.use(
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
-// ─── Health Check ────────────────────────────────────────────────────────────
+// ─── Health Check ───────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: env.NODE_ENV,
+    allowedOrigins,
   })
 })
 
-// ─── Rotas ────────────────────────────────────────────────────────────────────
+// ─── Rotas ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter)
 app.use('/api/projects', projectRouter)
 app.use('/api/focus-sessions', focusRoutes)
 
-// ─── 404 Handler ────────────────────────────────────────────────────────────
+// ─── 404 Handler ───────────────────────────────────────────────────────────
 app.use('*', (req, res) => {
   res.status(404).json({
     error: `Rota ${req.method} ${req.originalUrl} não encontrada`,
@@ -53,22 +59,7 @@ app.use('*', (req, res) => {
   })
 })
 
-// ─── Error Middleware ────────────────────────────────────────────────────────
+// ─── Error Middleware ───────────────────────────────────────────────────────
 app.use(errorMiddleware)
-
-// ─── Inicialização do Servidor ────────────────────────────────────────────────
-const PORT = env.PORT
-
-app.listen(PORT, () => {
-  console.log(`
-  ╔══════════════════════════════════════════╗
-  ║       🚀 DevSuite API iniciada!          ║
-  ╠══════════════════════════════════════════╣
-  ║  Ambiente: ${env.NODE_ENV.padEnd(29)}║
-  ║  Porta:    ${String(PORT).padEnd(29)}║
-  ║  Health:   http://localhost:${PORT}/health  ║
-  ╚══════════════════════════════════════════╝
-  `)
-})
 
 export default app
