@@ -1,19 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // APP.TS — Configuração do servidor Express
 // ═══════════════════════════════════════════════════════════════════════════
-//
-// 📚 CONCEITO: Separação entre app e server
-//
-// É boa prática separar:
-// - app.ts: configuração do Express (middlewares, rotas)
-// - server.ts ou index.ts: inicialização do servidor HTTP (listen)
-//
-// Isso facilita testes (você pode importar a app sem iniciar o servidor)
-// e é o padrão em projetos profissionais.
-// Em ambientes serverless (Vercel), o servidor HTTP é gerenciado pela
-// plataforma — basta exportar o handler Express.
 
-import 'dotenv/config'  // Carrega variáveis de ambiente do arquivo .env
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import authRouter from './routes/auth.routes'
@@ -23,60 +12,46 @@ import { errorMiddleware } from './middlewares/error.middleware'
 
 const app = express()
 
-// ─── Middlewares Globais ──────────────────────────────────────────────────────
-// Middlewares globais são executados em TODAS as requisições, na ordem definida
+// ─── CORS ────────────────────────────────────────────────────────────────────────
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+  : ['http://localhost:5173']
 
-// 📚 CONCEITO: CORS (Cross-Origin Resource Sharing)
-// Browsers bloqueiam requisições entre origens diferentes por segurança
-// (ex: frontend em localhost:3000 tentando acessar API em localhost:4000).
-// CORS é um mecanismo que permite ao servidor autorizar origens específicas.
-//
-// ⚠️ cors() sem configuração permite QUALQUER origem — ok em dev, perigoso em prod!
-// Em produção, especifique as origens permitidas.
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN?.split(',') || 'http://localhost:5173',
-    credentials: true, // permite enviar cookies (útil para auth mais avançada)
+    origin: (origin, callback) => {
+      // Permite requisições sem origin (curl, Postman, server-to-server)
+      if (!origin) return callback(null, true)
+      if (allowedOrigins.includes(origin)) return callback(null, true)
+      callback(new Error(`CORS: origin '${origin}' não permitida`))
+    },
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 )
 
-// 📚 CONCEITO: express.json()
-// Por padrão, o Express não sabe ler JSON no body das requisições.
-// Este middleware parseia o body e disponibiliza em req.body.
-// Limite de 10mb — protege contra ataques de payload gigante.
 app.use(express.json({ limit: '10mb' }))
-
-// 📚 CONCEITO: express.urlencoded()
-// Parseia dados enviados via formulário HTML (Content-Type: application/x-www-form-urlencoded)
-// Útil para formulários tradicionais, menos comum em APIs modernas
 app.use(express.urlencoded({ extended: true }))
 
-// ─── Health Check ─────────────────────────────────────────────────────────────
-// 📚 CONCEITO: Health Check
-// Todo serviço em produção deve ter um endpoint de health check.
-// É usado por load balancers, Kubernetes, e ferramentas de monitoramento
-// para saber se o serviço está "vivo" e pronto para receber tráfego.
+// ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV,
+    // Exibe origens permitidas para facilitar debug de CORS
+    allowedOrigins,
   })
 })
 
-// ─── Rotas ─────────────────────────────────────────────────────────────────────
-// 📚 CONCEITO: Versionamento de API
-// /api/v1/ permite lançar breaking changes em /api/v2/ sem quebrar clientes
-// que ainda usam a v1. Boa prática desde o início!
+// ─── Rotas ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter)
 app.use('/api/projects', projectRouter)
 app.use('/api/focus-sessions', focusRoutes)
 
-// ─── 404 Handler ──────────────────────────────────────────────────────────────
-// Captura requisições para rotas que não existem
+// ─── 404 Handler ────────────────────────────────────────────────────────────
 app.use('*', (req, res) => {
   res.status(404).json({
     error: `Rota ${req.method} ${req.originalUrl} não encontrada`,
@@ -84,9 +59,7 @@ app.use('*', (req, res) => {
   })
 })
 
-// ─── Error Middleware ─────────────────────────────────────────────────────────
-// DEVE ser o ÚLTIMO middleware registrado
-// O Express identifica error middlewares pelos 4 parâmetros (err, req, res, next)
+// ─── Error Middleware ────────────────────────────────────────────────────────
 app.use(errorMiddleware)
 
 export default app
