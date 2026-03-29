@@ -9,6 +9,7 @@ import authRouter from './routes/auth.routes'
 import projectRouter from './routes/project.routes'
 import { focusRoutes } from './routes/focus.routes'
 import { errorMiddleware } from './middlewares/error.middleware'
+import { env } from './lib/env' // Valida variáveis de ambiente na inicialização
 
 const app = express()
 
@@ -19,13 +20,8 @@ const allowedOrigins = process.env.CORS_ORIGIN
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Permite requisições sem origin (curl, Postman, server-to-server)
-      if (!origin) return callback(null, true)
-      if (allowedOrigins.includes(origin)) return callback(null, true)
-      callback(new Error(`CORS: origin '${origin}' não permitida`))
-    },
-    credentials: true,
+    origin: env.CORS_ORIGIN?.split(',') || 'http://localhost:5173',
+    credentials: true, // permite enviar cookies (útil para auth mais avançada)
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
@@ -40,9 +36,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV,
-    // Exibe origens permitidas para facilitar debug de CORS
-    allowedOrigins,
+    environment: env.NODE_ENV,
   })
 })
 
@@ -61,5 +55,20 @@ app.use('*', (req, res) => {
 
 // ─── Error Middleware ────────────────────────────────────────────────────────
 app.use(errorMiddleware)
+
+// ─── Inicialização do Servidor ────────────────────────────────────────────────
+const PORT = env.PORT
+
+app.listen(PORT, () => {
+  console.log(`
+  ╔══════════════════════════════════════════╗
+  ║       🚀 DevSuite API iniciada!          ║
+  ╠══════════════════════════════════════════╣
+  ║  Ambiente: ${env.NODE_ENV.padEnd(29)}║
+  ║  Porta:    ${String(PORT).padEnd(29)}║
+  ║  Health:   http://localhost:${PORT}/health  ║
+  ╚══════════════════════════════════════════╝
+  `)
+})
 
 export default app

@@ -18,6 +18,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma'
+import { env } from '../lib/env'
 import { AppError } from '../middlewares/error.middleware'
 
 // ─── Schemas de Validação (Zod) ─────────────────────────────────────────────
@@ -54,14 +55,14 @@ type LoginInput = z.infer<typeof loginSchema>
 function generateToken(userId: string): string {
   return jwt.sign(
     { userId }, // payload
-    process.env.JWT_SECRET as string, // chave secreta
+    env.JWT_SECRET, // chave secreta (validada na inicialização)
     {
-      expiresIn: process.env.JWT_EXPIRES_IN || '7d', // expiração
+      expiresIn: env.JWT_EXPIRES_IN, // expiração (ex: "7d", "24h")
       // 📚 Em produção, considere refresh tokens:
       // - access token: curta duração (15min), usado nas requisições
       // - refresh token: longa duração (30d), salvo no banco, usado só para
       //   gerar novos access tokens. Mais seguro pois permite revogação.
-    }
+    } as jwt.SignOptions
   )
 }
 

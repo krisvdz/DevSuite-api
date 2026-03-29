@@ -28,6 +28,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { ZodError } from 'zod'
 import { Prisma } from '@prisma/client'
+import { env } from '../lib/env'
 
 // Classe customizada para erros operacionais (erros esperados)
 // 📚 Diferença entre erros operacionais e de programação:
@@ -103,7 +104,7 @@ export function errorMiddleware(
   // Em produção, NUNCA exponha detalhes internos ao cliente!
   return res.status(500).json({
     error:
-      process.env.NODE_ENV === 'production'
+      env.NODE_ENV === 'production'
         ? 'Erro interno do servidor'
         : err.message,
     code: 'INTERNAL_SERVER_ERROR',

@@ -21,6 +21,7 @@
 // O Prisma gerencia isso automaticamente para você.
 
 import { PrismaClient } from '@prisma/client'
+import { env } from './env'
 
 // TypeScript precisa saber sobre nossa propriedade customizada no globalThis
 const globalForPrisma = globalThis as unknown as {
@@ -32,9 +33,9 @@ export const prisma =
   new PrismaClient({
     // Em desenvolvimento, loga todas as queries executadas no terminal
     // Útil para debugar, mas desative em produção (verboso e lento)
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    log: env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   })
 
-if (process.env.NODE_ENV !== 'production') {
+if (env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
 }
