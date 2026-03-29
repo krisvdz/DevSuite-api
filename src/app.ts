@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// APP.TS — Ponto de entrada do servidor Express
+// APP.TS — Configuração do servidor Express
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // 📚 CONCEITO: Separação entre app e server
@@ -10,6 +10,8 @@
 //
 // Isso facilita testes (você pode importar a app sem iniciar o servidor)
 // e é o padrão em projetos profissionais.
+// Em ambientes serverless (Vercel), o servidor HTTP é gerenciado pela
+// plataforma — basta exportar o handler Express.
 
 import 'dotenv/config'  // Carrega variáveis de ambiente do arquivo .env
 import express from 'express'
@@ -86,20 +88,5 @@ app.use('*', (req, res) => {
 // DEVE ser o ÚLTIMO middleware registrado
 // O Express identifica error middlewares pelos 4 parâmetros (err, req, res, next)
 app.use(errorMiddleware)
-
-// ─── Inicialização do Servidor ────────────────────────────────────────────────
-const PORT = Number(process.env.PORT) || 4000
-
-app.listen(PORT, () => {
-  console.log(`
-  ╔══════════════════════════════════════════╗
-  ║       🚀 TaskFlow API iniciada!          ║
-  ╠══════════════════════════════════════════╣
-  ║  Ambiente: ${(process.env.NODE_ENV || 'development').padEnd(29)}║
-  ║  Porta:    ${String(PORT).padEnd(29)}║
-  ║  Health:   http://localhost:${PORT}/health  ║
-  ╚══════════════════════════════════════════╝
-  `)
-})
 
 export default app
