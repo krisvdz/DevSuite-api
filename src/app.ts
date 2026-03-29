@@ -18,6 +18,7 @@ import authRouter from './routes/auth.routes'
 import projectRouter from './routes/project.routes'
 import { focusRoutes } from './routes/focus.routes'
 import { errorMiddleware } from './middlewares/error.middleware'
+import { env } from './lib/env' // Valida variáveis de ambiente na inicialização
 
 const app = express()
 
@@ -33,7 +34,7 @@ const app = express()
 // Em produção, especifique as origens permitidas.
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN?.split(',') || 'http://localhost:5173',
+    origin: env.CORS_ORIGIN?.split(',') || 'http://localhost:5173',
     credentials: true, // permite enviar cookies (útil para auth mais avançada)
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -61,7 +62,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV,
+    environment: env.NODE_ENV,
   })
 })
 
@@ -88,14 +89,14 @@ app.use('*', (req, res) => {
 app.use(errorMiddleware)
 
 // ─── Inicialização do Servidor ────────────────────────────────────────────────
-const PORT = Number(process.env.PORT) || 4000
+const PORT = env.PORT
 
 app.listen(PORT, () => {
   console.log(`
   ╔══════════════════════════════════════════╗
-  ║       🚀 TaskFlow API iniciada!          ║
+  ║       🚀 DevSuite API iniciada!          ║
   ╠══════════════════════════════════════════╣
-  ║  Ambiente: ${(process.env.NODE_ENV || 'development').padEnd(29)}║
+  ║  Ambiente: ${env.NODE_ENV.padEnd(29)}║
   ║  Porta:    ${String(PORT).padEnd(29)}║
   ║  Health:   http://localhost:${PORT}/health  ║
   ╚══════════════════════════════════════════╝

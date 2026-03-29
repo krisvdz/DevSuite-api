@@ -35,6 +35,7 @@
 
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import { env } from '../lib/env'
 
 // Extende o tipo Request do Express para incluir o usuário autenticado
 // 📚 CONCEITO: Declaration Merging — TypeScript permite estender tipos
@@ -74,7 +75,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     // jwt.verify: valida a assinatura E a expiração ao mesmo tempo
     const payload = jwt.verify(
       token,
-      process.env.JWT_SECRET as string
+      env.JWT_SECRET
     ) as JwtPayload
 
     // 3. Injeta o userId na requisição para os controllers usarem
