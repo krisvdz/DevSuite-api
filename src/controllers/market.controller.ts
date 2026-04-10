@@ -64,11 +64,20 @@ interface PriceData {
   fetchedAt: string
 }
 
-let priceCache: { data: PriceData[]; fetchedAt: number } | null = null
-const PRICE_CACHE_TTL_MS = 60 * 1000 // 1 minute
+interface PriceResult {
+  data: PriceData[]
+  isStale: boolean       // true = from last successful fetch (market closed / API down)
+  lastUpdated: string    // ISO timestamp of when data was last successfully fetched
+}
 
-async function fetchYahooQuote(symbols: string): Promise<PriceData[]> {
-  // Try v7 batch endpoint first
+const PRICE_CACHE_TTL_MS = 60 * 1000 // 1 minute for "live" cache
+
+// liveCache: refreshed every minute when market is open
+// staleCache: last known good data — kept indefinitely as fallback
+let liveCache: { data: PriceData[]; fetchedAt: number } | null = null
+let staleCache: { data: PriceData[]; fetchedAt: number } | null = null
+
+async function tryFetchYahooQuote(symbols: string): Promise<PriceData[] | null> {
   const urls = [
     `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketPreviousClose&formatted=false`,
     `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketPreviousClose&formatted=false`,
@@ -115,23 +124,35 @@ async function fetchYahooQuote(symbols: string): Promise<PriceData[]> {
     }
   }
 
-  throw new AppError(
-    'Não foi possível buscar preços dos ETFs. O mercado pode estar fechado ou a fonte de dados indisponível.',
-    502,
-    'PRICES_FETCH_ERROR'
-  )
+  return null // Signal failure without throwing
 }
 
-async function fetchEtfPrices(): Promise<PriceData[]> {
+async function fetchEtfPrices(): Promise<PriceResult> {
   const now = Date.now()
-  if (priceCache && now - priceCache.fetchedAt < PRICE_CACHE_TTL_MS) {
-    return priceCache.data
+
+  // Return live cache if still fresh
+  if (liveCache && now - liveCache.fetchedAt < PRICE_CACHE_TTL_MS) {
+    return { data: liveCache.data, isStale: false, lastUpdated: new Date(liveCache.fetchedAt).toISOString() }
   }
 
+  // Try to fetch fresh data
   const symbols = SUPPORTED_ETFS.join(',')
-  const data = await fetchYahooQuote(symbols)
-  priceCache = { data, fetchedAt: now }
-  return data
+  const freshData = await tryFetchYahooQuote(symbols)
+
+  if (freshData) {
+    liveCache = { data: freshData, fetchedAt: now }
+    staleCache = { data: freshData, fetchedAt: now } // promote to stale as well
+    return { data: freshData, isStale: false, lastUpdated: new Date(now).toISOString() }
+  }
+
+  // Live fetch failed — fall back to stale cache (last known good data)
+  if (staleCache) {
+    console.warn('[MarketPulse] Live price fetch failed, serving stale cache from', new Date(staleCache.fetchedAt).toISOString())
+    return { data: staleCache.data, isStale: true, lastUpdated: new Date(staleCache.fetchedAt).toISOString() }
+  }
+
+  // No data at all — return empty gracefully
+  return { data: [], isStale: true, lastUpdated: new Date().toISOString() }
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -177,11 +198,12 @@ export async function savePortfolio(req: Request, res: Response, next: NextFunct
 
 export async function getPrices(req: Request, res: Response, next: NextFunction) {
   try {
-    const data = await fetchEtfPrices()
-    const cachedUntil = priceCache
-      ? new Date(priceCache.fetchedAt + PRICE_CACHE_TTL_MS).toISOString()
-      : new Date().toISOString()
-    return res.json({ data, cachedUntil })
+    const result = await fetchEtfPrices()
+    return res.json({
+      data: result.data,
+      isStale: result.isStale,
+      lastUpdated: result.lastUpdated,
+    })
   } catch (error) {
     next(error)
   }
@@ -218,55 +240,70 @@ export async function generateAnalysis(req: Request, res: Response, next: NextFu
 
     const userId = req.user!.id
 
-    // Fetch portfolio, prices, and news in parallel
-    const [portfolio, prices, news] = await Promise.all([
+    // Fetch portfolio and news — mandatory. Prices are best-effort (never block analysis).
+    const [portfolio, priceResult, newsResult] = await Promise.all([
       prisma.etfPortfolio.findMany({ where: { userId }, orderBy: { percentage: 'desc' } }),
-      fetchEtfPrices(),
-      fetchFinancialNews(),
+      fetchEtfPrices().catch(() => ({ data: [], isStale: true, lastUpdated: new Date().toISOString() })),
+      fetchFinancialNews().catch(() => []),
     ])
 
     if (portfolio.length === 0) {
       throw new AppError('Configure sua carteira antes de gerar uma análise.', 400, 'EMPTY_PORTFOLIO')
     }
 
-    // Filter prices to only the user's portfolio symbols
+    const news = Array.isArray(newsResult) ? newsResult : []
+    const prices = priceResult.data
+    const pricesAreStale = priceResult.isStale
+    const pricesLastUpdated = priceResult.lastUpdated
+
+    // Filter prices to the user's portfolio symbols
     const portfolioSymbols = new Set(portfolio.map((p) => p.etfSymbol))
     const relevantPrices = prices.filter((p) => portfolioSymbols.has(p.symbol))
 
-    // Top 5 most recent news items
     const top5News = news.slice(0, 5)
 
     const portfolioText = portfolio
       .map((p) => `- ${p.etfSymbol} (${ETF_NAMES[p.etfSymbol] ?? p.etfSymbol}): ${p.percentage}% da carteira`)
       .join('\n')
 
-    const pricesText = relevantPrices
-      .map((p) => {
-        const sign = p.changePercent >= 0 ? '+' : ''
-        return `- ${p.symbol}: $${p.price.toFixed(2)} (${sign}${p.changePercent.toFixed(2)}% hoje)`
-      })
-      .join('\n')
+    // Build prices section — adapt messaging based on data availability
+    let pricesSection: string
+    if (relevantPrices.length === 0) {
+      pricesSection = `## Preços dos ETFs
+ATENÇÃO: Preços não disponíveis no momento (mercado fechado ou fonte indisponível).
+Baseie sua análise exclusivamente nas notícias e na composição da carteira.`
+    } else {
+      const priceLabel = pricesAreStale
+        ? `## Preços (último pregão disponível — ${new Date(pricesLastUpdated).toLocaleDateString('pt-BR')})`
+        : '## Preços Atuais'
 
-    const newsText = top5News
-      .map((n, i) => `${i + 1}. [${n.source}] ${n.title}`)
-      .join('\n')
+      pricesSection = `${priceLabel}
+${relevantPrices.map((p) => {
+  const sign = p.changePercent >= 0 ? '+' : ''
+  const staleMark = pricesAreStale ? ' [fechamento anterior]' : ''
+  return `- ${p.symbol}: $${p.price.toFixed(2)} (${sign}${p.changePercent.toFixed(2)}%${staleMark})`
+}).join('\n')}`
+    }
 
-    const systemPrompt = `Você é um analista financeiro especializado em ETFs globais. Sua função é analisar a carteira do usuário com base nos preços atuais dos ativos e nas últimas notícias do mercado financeiro. Você sempre responde em português brasileiro. Você retorna APENAS JSON válido, sem markdown, sem blocos de código, sem texto adicional.`
+    const newsText = top5News.length > 0
+      ? top5News.map((n, i) => `${i + 1}. [${n.source}] ${n.title}`).join('\n')
+      : 'Nenhuma notícia disponível no momento.'
+
+    const systemPrompt = `Você é um analista financeiro especializado em ETFs globais. Sua função é analisar a carteira do usuário com base nos preços disponíveis e nas últimas notícias do mercado financeiro. Quando os preços não estiverem disponíveis ou forem do último pregão, baseie-se principalmente nas notícias e tendências de mercado. Você sempre responde em português brasileiro. Você retorna APENAS JSON válido, sem markdown, sem blocos de código, sem texto adicional.`
 
     const userPrompt = `Analise a carteira de ETFs abaixo e forneça recomendações de ação para cada ativo.
 
 ## Carteira do Usuário
 ${portfolioText}
 
-## Preços Atuais
-${pricesText}
+${pricesSection}
 
 ## Notícias Recentes (top 5)
 ${newsText}
 
 ## Formato de Resposta (JSON estrito, sem markdown)
 {
-  "summary": "Parágrafo de 3-4 linhas resumindo o cenário de mercado atual e o impacto geral na carteira do usuário",
+  "summary": "Parágrafo de 3-4 linhas resumindo o cenário de mercado atual e o impacto geral na carteira do usuário. Se os preços forem do último pregão ou indisponíveis, mencione isso.",
   "actions": [
     {
       "symbol": "TICKER",
@@ -280,8 +317,9 @@ ${newsText}
 Regras:
 - action deve ser exatamente "COMPRAR", "VENDER" ou "MANTER"
 - confidence deve ser exatamente "ALTA", "MEDIA" ou "BAIXA"
+- Se não houver preços disponíveis, use confidence "BAIXA" ou "MEDIA" e baseie-se nas notícias
 - Inclua APENAS os ETFs que constam na carteira do usuário
-- Baseie as recomendações nas notícias e nos movimentos de preço`
+- Baseie as recomendações nas notícias e nos movimentos de preço disponíveis`
 
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
 
