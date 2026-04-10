@@ -8,6 +8,7 @@ import cors from 'cors'
 import authRouter from './routes/auth.routes'
 import projectRouter from './routes/project.routes'
 import { focusRoutes } from './routes/focus.routes'
+import { marketRoutes } from './routes/market.routes'
 import { errorMiddleware } from './middlewares/error.middleware'
 import { env } from './lib/env'
 
@@ -50,6 +51,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRouter)
 app.use('/api/projects', projectRouter)
 app.use('/api/focus-sessions', focusRoutes)
+app.use('/api/market', marketRoutes)
 
 // ─── 404 Handler ───────────────────────────────────────────────────────────
 app.use('*', (req, res) => {

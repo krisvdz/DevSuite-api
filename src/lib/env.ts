@@ -44,6 +44,9 @@ const envSchema = z.object({
 
   // CORS (opcional — tem fallback)
   CORS_ORIGIN: z.string().optional(),
+
+  // Market Pulse — Claude AI (opcional; obrigatório apenas para gerar análises)
+  ANTHROPIC_API_KEY: z.string().optional(),
 })
 
 // Tipo inferido automaticamente — use em vez de process.env para ter autocomplete

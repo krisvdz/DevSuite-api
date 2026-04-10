@@ -74,6 +74,8 @@ model User {
   // Isso NÃO cria coluna no banco, é apenas para o ORM fazer JOINs
   projects  Project[]
   focusSessions FocusSession[]
+  etfPortfolios    EtfPortfolio[]
+  marketAnalysis   MarketAnalysis?
 
   // Define o nome da tabela no banco (padrão seria "User")
   @@map("users")
@@ -130,6 +132,34 @@ model Task {
   // Regra: indexe campos que aparecem frequentemente no WHERE das queries.
   @@index([projectId])
   @@map("tasks")
+}
+
+// ─── Tabela: etf_portfolios ──────────────────────────────────────────────────
+model EtfPortfolio {
+  id         String   @id @default(cuid())
+  etfSymbol  String
+  percentage Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, etfSymbol])
+  @@index([userId])
+  @@map("etf_portfolios")
+}
+
+// ─── Tabela: market_analyses ─────────────────────────────────────────────────
+model MarketAnalysis {
+  id        String   @id @default(cuid())
+  content   Json
+  createdAt DateTime @default(now())
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("market_analyses")
 }
 
 // ─── Enum: SessionType ───────────────────────────────────────────────────────
